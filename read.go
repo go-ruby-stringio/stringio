@@ -5,7 +5,7 @@
 package stringio
 
 import (
-	"strings"
+	"bytes"
 	"unicode/utf8"
 )
 
@@ -108,7 +108,9 @@ func (s *StringIO) gets(sep string, limit int) (line string, ok bool) {
 		}
 		rest := s.buf[s.pos:]
 		end := len(rest)
-		if i := strings.Index(string(rest), "\n\n"); i >= 0 {
+		// Index directly on the []byte (no string(rest) copy): bytes.Index scans
+		// only up to the first "\n\n", so the paragraph split stays linear.
+		if i := bytes.Index(rest, []byte("\n\n")); i >= 0 {
 			// Include the run of newlines that terminates the paragraph.
 			j := i + 1
 			for j < len(rest) && rest[j] == '\n' {
@@ -127,7 +129,20 @@ func (s *StringIO) gets(sep string, limit int) (line string, ok bool) {
 
 	rest := s.buf[s.pos:]
 	end := len(rest)
-	if i := strings.Index(string(rest), sep); i >= 0 {
+	// Scan for the separator directly on the []byte slice starting at the cursor.
+	// This never copies the remaining buffer to a string (the old string(rest)
+	// allocated and rescanned a shrinking copy per line — O(n²) over the line
+	// count) and never rescans already-consumed bytes: bytes.Index/IndexByte reads
+	// only as far as the next separator, so the whole line walk is linear. For the
+	// common single-byte separator ("\n", the $/ default) IndexByte is the tight
+	// memchr-equivalent path.
+	var i int
+	if len(sep) == 1 {
+		i = bytes.IndexByte(rest, sep[0])
+	} else {
+		i = bytes.Index(rest, []byte(sep))
+	}
+	if i >= 0 {
 		end = i + len(sep)
 	}
 	if limit >= 0 && limit < end {
