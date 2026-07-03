@@ -194,13 +194,25 @@ func TestGets(t *testing.T) {
 			t.Errorf("Gets #%d = %q,%v,%v want %q,%v", i, line, ok, err, w.line, w.ok)
 		}
 	}
-	// custom separator.
+	// custom single-byte separator.
 	io2 := NewString("a;b")
 	if l, ok, _ := io2.Gets(";"); l != "a;" || !ok {
 		t.Errorf("Gets(;) = %q,%v", l, ok)
 	}
 	if l, ok, _ := io2.Gets(";"); l != "b" || !ok {
 		t.Errorf("Gets(;) = %q,%v", l, ok)
+	}
+	// multi-byte separator (exercises the bytes.Index scan path): the returned
+	// line includes the whole separator, and a trailing partial-separator record
+	// with no terminator is returned as the rest.
+	io2b := NewString("aa::bb::cc")
+	for i, w := range []string{"aa::", "bb::", "cc"} {
+		if l, ok, _ := io2b.Gets("::"); l != w || !ok {
+			t.Errorf("Gets(::) #%d = %q,%v want %q", i, l, ok, w)
+		}
+	}
+	if _, ok, _ := io2b.Gets("::"); ok {
+		t.Error("Gets(::) at EOF should be !ok")
 	}
 	// separator absent → rest.
 	io3 := NewString("xyz")
